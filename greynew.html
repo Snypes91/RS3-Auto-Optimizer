@@ -1,0 +1,1483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grey-OS P2P Cyber Network v18.0 (UK Edition)</title>
+    <!-- PeerJS WebRTC Library -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <!-- MQTT WebSockets for Global Discovery -->
+    <script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
+    <style>
+        :root {
+            --bg-color: rgba(13, 17, 23, 0.85);
+            --panel-color: rgba(22, 27, 34, 0.92);
+            --border-color: #30363d;
+            --text-green: #3fb950;
+            --text-red: #f85149;
+            --text-cyan: #58a6ff;
+            --text-yellow: #d29922;
+            --text-main: #c9d1d9;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0; padding: 0;
+            background-color: #010409;
+            color: var(--text-main);
+            font-family: 'Consolas', 'Courier New', monospace;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Animated Cyberpunk Background Canvas */
+        #matrix-bg {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            z-index: -1;
+            opacity: 0.35;
+            pointer-events: none;
+        }
+
+        #taskbar {
+            height: 38px;
+            background-color: rgba(15, 20, 28, 0.95);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 15px;
+            font-size: 12px;
+            z-index: 9999;
+            user-select: none;
+            backdrop-filter: blur(8px);
+        }
+
+        .taskbar-section { display: flex; align-items: center; gap: 12px; }
+
+        /* Upgraded Main Dashboard Grid Layout */
+        #desktop {
+            flex: 1; 
+            padding: 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1500px;
+            margin: auto;
+            width: 90%;
+            gap: 24px;
+            position: relative;
+            z-index: 10;
+            user-select: none;
+        }
+
+        .desktop-icon {
+            flex: 1;
+            aspect-ratio: 1 / 1;
+            min-width: 140px;
+            max-width: 230px;
+            background: linear-gradient(145deg, rgba(18, 24, 38, 0.9), rgba(8, 12, 20, 0.95));
+            border: 1px solid rgba(100, 180, 255, 0.18);
+            border-radius: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 18px;
+            padding: 20px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+            backdrop-filter: blur(12px);
+            cursor: pointer;
+            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .desktop-icon:hover {
+            transform: translateY(-8px) scale(1.03);
+            border-color: rgba(100, 180, 255, 0.5);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 30px rgba(88, 166, 255, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+            background: linear-gradient(145deg, rgba(24, 32, 54, 0.95), rgba(12, 17, 29, 0.98));
+        }
+
+        .desktop-icon .icon { 
+            font-size: 52px; 
+            margin-bottom: 0; 
+            filter: drop-shadow(0 0 12px rgba(96, 165, 250, 0.5));
+            transition: transform 0.3s ease;
+        }
+
+        .desktop-icon:hover .icon {
+            transform: scale(1.12);
+        }
+
+        .desktop-icon .label { 
+            font-size: 15px; 
+            text-align: center; 
+            color: #f3f4f6; 
+            font-weight: 600; 
+            letter-spacing: 0.6px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+        }
+
+        .window {
+            position: absolute;
+            width: 760px; height: 500px;
+            min-width: 320px; min-height: 200px;
+            background-color: var(--panel-color);
+            border: 1px solid var(--border-color);
+            box-shadow: 0 16px 40px rgba(0,0,0,0.85);
+            border-radius: 8px; display: flex;
+            flex-direction: column; z-index: 100;
+            overflow: hidden; resize: both;
+            backdrop-filter: blur(12px);
+        }
+
+        .window-header {
+            height: 32px; background-color: rgba(22, 27, 34, 0.98);
+            border-bottom: 1px solid var(--border-color);
+            display: flex; align-items: center;
+            justify-content: space-between;
+            padding: 0 10px; font-size: 12px;
+            cursor: move; font-weight: bold; user-select: none;
+        }
+
+        .window-controls { display: flex; gap: 8px; }
+        .win-btn { width: 12px; height: 12px; border-radius: 50%; display: inline-block; cursor: pointer; }
+        .win-close { background: #ff5f56; border: 1px solid #e0443e; }
+        .win-min { background: #ffbd2e; border: 1px solid #dea123; }
+        .win-max { background: #27c93f; border: 1px solid #1aab29; }
+
+        .window-body {
+            flex: 1; padding: 14px;
+            overflow-y: auto; display: flex;
+            flex-direction: column; background-color: rgba(4, 13, 20, 0.85);
+        }
+
+        .terminal-output {
+            flex: 1; white-space: pre-wrap;
+            overflow-y: auto; line-height: 1.4;
+            font-size: 13px; user-select: text; cursor: text;
+        }
+
+        .terminal-input-line { display: flex; margin-top: 8px; }
+        .terminal-prompt { color: var(--text-green); margin-right: 8px; font-weight: bold; user-select: none; }
+        .cmd-input {
+            flex: 1; background: transparent;
+            border: none; outline: none;
+            color: var(--text-green); font-family: inherit;
+            font-size: 13px;
+        }
+
+        .grid-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .grid-3col { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+
+        .card-node {
+            background: rgba(16, 22, 34, 0.8);
+            border: 1px solid var(--border-color);
+            padding: 12px; border-radius: 6px;
+            display: flex; flex-direction: column;
+            justify-content: space-between;
+        }
+        .card-node.unlocked { border-color: var(--text-cyan); box-shadow: 0 0 12px rgba(88,166,255,0.2); }
+        .card-node h4 { margin: 0 0 5px 0; color: var(--text-cyan); }
+        .card-node p { font-size: 11px; margin: 0 0 8px 0; color: #8b949e; }
+        .card-node .stat { font-size: 11px; color: var(--text-yellow); font-weight: bold; margin-bottom: 8px; }
+
+        .peer-box {
+            background: rgba(16, 22, 34, 0.8); border: 1px solid var(--border-color);
+            padding: 10px; border-radius: 6px; margin-bottom: 8px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        .status-dot {
+            height: 8px; width: 8px; background-color: var(--text-green);
+            border-radius: 50%; display: inline-block; margin-right: 6px;
+            box-shadow: 0 0 8px var(--text-green);
+        }
+
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(1, 4, 9, 0.9); z-index: 99999;
+            display: flex; align-items: center; justify-content: center;
+            backdrop-filter: blur(8px);
+        }
+        .modal-card {
+            background: var(--panel-color); border: 1px solid var(--border-color);
+            width: 480px; max-width: 90%; padding: 24px; border-radius: 8px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.9);
+        }
+
+        .security-warning-box {
+            background: rgba(248, 81, 73, 0.12);
+            border: 1px solid var(--text-red);
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 15px;
+            color: var(--text-red);
+            font-size: 11px;
+            line-height: 1.4;
+        }
+
+        .tutorial-box {
+            position: fixed; bottom: 20px; right: 20px; width: 380px;
+            background: rgba(22, 27, 34, 0.95); border: 2px solid var(--text-cyan);
+            border-radius: 8px; padding: 16px; box-shadow: 0 0 25px rgba(88, 166, 255, 0.4);
+            z-index: 999999; backdrop-filter: blur(10px);
+        }
+
+        .alert-card {
+            background: rgba(43, 11, 14, 0.9);
+            border: 2px solid var(--text-red);
+            padding: 15px; border-radius: 6px;
+            margin-bottom: 15px;
+            box-shadow: 0 0 25px rgba(248, 81, 73, 0.5);
+            animation: alertPulse 1s infinite alternate;
+        }
+
+        @keyframes alertPulse {
+            0% { border-color: var(--text-red); box-shadow: 0 0 15px rgba(248, 81, 73, 0.4); }
+            100% { border-color: #ff9994; box-shadow: 0 0 30px rgba(248, 81, 73, 0.8); }
+        }
+
+        .progress-bar-container {
+            width: 100%; height: 20px; background: #0d1117;
+            border: 1px solid var(--border-color); border-radius: 10px;
+            overflow: hidden; margin-top: 6px; position: relative;
+        }
+        .progress-bar-fill {
+            height: 100%; width: 0%; background: linear-gradient(90deg, #da3633, #f85149);
+            transition: width 0.1s linear;
+        }
+        .terminal-progress-fill {
+            background: linear-gradient(90deg, #238636, #3fb950) !important;
+        }
+        .progress-bar-text {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11px; font-weight: bold; color: #ffffff; text-shadow: 1px 1px 2px #000;
+        }
+
+        .hidden { display: none !important; }
+
+        button {
+            background-color: var(--panel-color); color: #ffffff;
+            border: 1px solid var(--border-color); padding: 6px 12px;
+            border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 12px;
+            transition: background 0.15s;
+        }
+        button:hover { background-color: rgba(88, 166, 255, 0.15); border-color: var(--text-cyan); }
+        button:disabled { opacity: 0.4; cursor: not-allowed; }
+        input[type="text"], input[type="password"] {
+            background: rgba(13, 17, 23, 0.9); border: 1px solid var(--border-color);
+            color: #ffffff; padding: 8px; border-radius: 6px; font-family: inherit;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Animated Cyber Canvas Background -->
+    <canvas id="matrix-bg"></canvas>
+
+    <!-- AUTHENTICATION GATE -->
+    <div id="auth-modal" class="modal-overlay">
+        <div class="modal-card">
+            <h2 style="color:var(--text-cyan); margin-top:0; text-align:center;">🌐 Grey-OS Cyber Login</h2>
+            
+            <div class="security-warning-box">
+                <strong>⚠️ SECURITY WARNING FOR YOUR PROTECTION:</strong><br>
+                Do NOT use your real-life passwords or personal usernames here! Create a fictional gaming persona and password for this simulator.
+            </div>
+
+            <div id="auth-error" style="color:var(--text-red); font-size:11px; margin-bottom:10px; display:none;"></div>
+            
+            <form onsubmit="event.preventDefault(); handleLogin();">
+                <div class="auth-field" style="margin-bottom:12px;">
+                    <label style="display:block; font-size:12px; color:var(--text-cyan); margin-bottom:5px;">Username (Network Identity)</label>
+                    <input type="text" id="auth-username" placeholder="Enter gaming alias..." autocomplete="off" style="width:100%;">
+                </div>
+                <div class="auth-field" style="margin-bottom:12px;">
+                    <label style="display:block; font-size:12px; color:var(--text-cyan); margin-bottom:5px;">Password</label>
+                    <input type="password" id="auth-password" placeholder="Enter password..." style="width:100%;">
+                </div>
+
+                <div style="display:flex; gap:10px; margin-top:15px;">
+                    <button type="submit" style="flex:1; background:#238636; border-color:#2ea043; font-weight:bold; padding:8px;">Login / Register</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- INTERACTIVE TUTORIAL OVERLAY BOX -->
+    <div id="tutorial-card" class="tutorial-box hidden">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <strong style="color:var(--text-cyan); font-size:13px;" id="tut-title">📖 ACADEMY TUTORIAL (Step 1/6)</strong>
+            <button onclick="skipTutorial()" style="padding:2px 6px; font-size:10px; background:#30363d;">Skip</button>
+        </div>
+        <div id="tut-body" style="font-size:12px; line-height:1.4; color:var(--text-main); margin-bottom:12px;">
+            Welcome operator! Let's get you set up with your first exploit mission.
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <button id="tut-prev-btn" onclick="prevTutorialStep()" style="padding:4px 8px;" disabled>Previous</button>
+            <button id="tut-next-btn" onclick="nextTutorialStep()" style="padding:4px 8px; background:#238636; border-color:#2ea043; font-weight:bold;">Next Step →</button>
+        </div>
+    </div>
+
+    <!-- Taskbar -->
+    <div id="taskbar">
+        <div class="taskbar-section">
+            <strong>GREY-OS Online v18.0 (UK)</strong>
+            <button onclick="toggleMusic()" id="music-btn" style="padding: 2px 8px;">🎵 BGM: OFF</button>
+            <button onclick="startTutorialManual()" style="padding: 2px 8px; background:#1f6feb;">❓ Replay Tutorial</button>
+            <button onclick="logout()" style="padding: 2px 8px; background:#da3633; border-color:#f85149;">Logout</button>
+        </div>
+        <div class="taskbar-section">
+            <span>User: <strong id="my-username-display" style="color:var(--text-cyan)">Offline</strong></span>
+            <span>Vault: <span id="balance-display" style="color:var(--text-yellow)">£1000.00</span></span>
+            <span id="clock-display" style="color:#8b949e">00:00:00</span>
+        </div>
+    </div>
+
+    <!-- Desktop Icons (Upgraded Layout & Renamed P2P to Real Players) -->
+    <div id="desktop">
+        <div class="desktop-icon" onclick="openWindow('multiplayer-win')">
+            <span class="icon">🌐</span>
+            <span class="label">Real Players</span>
+        </div>
+        <div class="desktop-icon" onclick="openWindow('npc-win')">
+            <span class="icon">🏬</span>
+            <span class="label">UK NPC Brands</span>
+        </div>
+        <div class="desktop-icon" onclick="openWindow('defense-win')">
+            <span class="icon">🛡️</span>
+            <span class="label">Defenses</span>
+        </div>
+        <div class="desktop-icon" onclick="openWindow('terminal-win')">
+            <span class="icon">📟</span>
+            <span class="label">Terminal</span>
+        </div>
+        <div class="desktop-icon" onclick="openWindow('skill-win')">
+            <span class="icon">🌳</span>
+            <span class="label">Skill Tree</span>
+        </div>
+        <div class="desktop-icon" onclick="openWindow('botnet-win')">
+            <span class="icon">🤖</span>
+            <span class="label">Botnet Box</span>
+        </div>
+    </div>
+
+    <!-- INTRUSION DEFENSE MONITOR WINDOW -->
+    <div id="intrusion-alert-win" class="window hidden" style="top: 70px; left: 180px; width: 580px; height: 430px; z-index: 9000; border-color: var(--text-red);">
+        <div class="window-header" style="background:#3d080a; color:var(--text-red);">
+            <span>🚨 EMERGENCY DEFENSE: INTRUSION IN PROGRESS</span>
+            <div class="window-controls">
+                <span class="win-btn win-close" onclick="closeWindow('intrusion-alert-win')"></span>
+            </div>
+        </div>
+        <div class="window-body" style="background:rgba(15, 3, 4, 0.92);">
+            <div class="alert-card">
+                <h3 style="margin:0 0 5px 0; color:var(--text-red);">⚠️ ACTIVE INTRUSION BREACH DETECTED</h3>
+                <p style="margin:0; font-size:12px; color:#f0f6fc;">
+                    An incoming remote player exploit payload has compromised system peripherals!
+                </p>
+            </div>
+
+            <div style="flex:1; background:rgba(27, 7, 9, 0.85); border:1px solid #581316; padding:12px; border-radius:6px; margin-bottom:12px;">
+                <p style="margin:0 0 6px 0; font-size:12px; color:var(--text-yellow);">Intruder ID: <strong id="intruder-id-display" style="color:#ffffff;">Unknown</strong></p>
+                <p style="margin:0 0 6px 0; font-size:12px; color:var(--text-yellow);">Exploit Vector: <span id="intruder-tool-display" style="color:var(--text-red); font-weight:bold;">SSH_BRUTE</span></p>
+            </div>
+
+            <button onclick="purgeActiveIntruder()" style="background:#da3633; border-color:#f85149; font-weight:bold; padding:14px; font-size:15px; text-transform:uppercase; letter-spacing:1px; width:100%;">
+                🛡️ PURGE SESSION & BLOCK IP FOR 1 HOUR
+            </button>
+        </div>
+    </div>
+
+    <!-- UK NPC TARGETS DIRECTORY WINDOW -->
+    <div id="npc-win" class="window hidden" style="top: 90px; left: 140px; width: 680px; height: 460px;">
+        <div class="window-header">
+            <span>UK Retail & Fast-Food Systems Directory</span>
+            <div class="window-controls">
+                <span class="win-btn win-close" onclick="closeWindow('npc-win')"></span>
+            </div>
+        </div>
+        <div class="window-body">
+            <h3 style="margin-top:0; color:var(--text-cyan);">UK Corporate Target Networks</h3>
+            <p style="font-size:11px; color:#8b949e; margin-top:-5px; margin-bottom:15px;">
+                Scan and breach offline UK business targets to siphon funds into your bank vault.
+            </p>
+            <div id="npc-list" style="flex:1; overflow-y:auto;"></div>
+        </div>
+    </div>
+
+    <!-- MULTIPLAYER NETWORK MANAGER WINDOW -->
+    <div id="multiplayer-win" class="window hidden" style="top: 50px; left: 50px; width: 680px; height: 480px;">
+        <div class="window-header">
+            <span>Online Player Directory & Network Discovery</span>
+            <div class="window-controls">
+                <span class="win-btn win-close" onclick="closeWindow('multiplayer-win')"></span>
+            </div>
+        </div>
+        <div class="window-body">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <h3 style="margin:0; color:var(--text-cyan);">Live Online Players</h3>
+                <span style="font-size:11px; color:#8b949e;">Users Online: <strong id="online-count" style="color:var(--text-green)">0</strong></span>
+            </div>
+            
+            <div id="online-users-list" style="flex:1; overflow-y:auto; margin-bottom:15px; border:1px solid var(--border-color); padding:10px; border-radius:6px; background:rgba(8, 19, 29, 0.7);">
+                <p style="color:#8b949e; font-size:12px; text-align:center;">Scanning global network for online players...</p>
+            </div>
+
+            <h4 style="color:var(--text-yellow); margin-bottom:8px; margin-top:0;">Manual Peer Connection</h4>
+            <div style="display:flex; gap:10px;">
+                <input type="text" id="target-username-input" placeholder="Enter target player username..." style="flex:1;">
+                <button onclick="connectToPeerInput()" style="background:#238636; border-color:#2ea043; font-weight:bold;">Connect User</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SYSTEM DEFENSES WINDOW -->
+    <div id="defense-win" class="window hidden" style="top: 80px; left: 120px; width: 680px; height: 440px;">
+        <div class="window-header">
+            <span>System Defense Array</span>
+            <div class="window-controls">
+                <span class="win-btn win-close" onclick="closeWindow('defense-win')"></span>
+            </div>
+        </div>
+        <div class="window-body">
+            <h3 style="margin-top:0; color:var(--text-cyan);">Firewalls & Threat Shields</h3>
+            <div class="grid-2col" id="defense-container"></div>
+        </div>
+    </div>
+
+    <!-- TERMINAL WINDOW -->
+    <div id="terminal-win" class="window hidden" style="top: 100px; left: 360px;">
+        <div class="window-header">
+            <span>bash - Terminal Shell</span>
+            <div class="window-controls">
+                <span class="win-btn win-min" onclick="toggleMin('terminal-win')"></span>
+                <span class="win-btn win-max" onclick="toggleMax('terminal-win')"></span>
+                <span class="win-btn win-close" onclick="closeWindow('terminal-win')"></span>
+            </div>
+        </div>
+        <div class="window-body">
+            <div class="terminal-output" id="term-out">Grey-OS Online Terminal v18.0\nType 'help' for commands. Use ▲ / ▼ arrow keys for command history.\n---------------------------------------------------------------\n</div>
+            
+            <div id="attack-progress-container" class="hidden" style="margin-bottom:8px;">
+                <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-cyan);">
+                    <span id="progress-action-label">Executing Exploit...</span>
+                    <span id="progress-percent-label">0%</span>
+                </div>
+                <div class="progress-bar-container">
+                    <div id="terminal-progress-fill" class="progress-bar-fill terminal-progress-fill"></div>
+                </div>
+            </div>
+
+            <div class="terminal-input-line">
+                <span id="prompt-label" class="terminal-prompt">operator@grey-os:~$</span>
+                <input type="text" id="cmd-input" class="cmd-input" autofocus autocomplete="off" spellcheck="false">
+            </div>
+        </div>
+    </div>
+
+    <!-- SKILL TREE WINDOW -->
+    <div id="skill-win" class="window hidden" style="top: 120px; left: 200px; width: 720px; height: 480px;">
+        <div class="window-header">
+            <span>Offensive Exploit Skill Tree</span>
+            <div class="window-controls">
+                <span class="win-btn win-close" onclick="closeWindow('skill-win')"></span>
+            </div>
+        </div>
+        <div class="window-body">
+            <h3 style="margin-top:0; color:var(--text-cyan);">Upgrade Exploits</h3>
+            <div class="grid-3col" id="skill-tree-container"></div>
+        </div>
+    </div>
+
+    <!-- BOTNET MANAGER WINDOW -->
+    <div id="botnet-win" class="window hidden" style="top: 140px; left: 250px; width: 500px; height: 380px;">
+        <div class="window-header">
+            <span>Infected Botnet Manager</span>
+            <div class="window-controls">
+                <span class="win-btn win-close" onclick="closeWindow('botnet-win')"></span>
+            </div>
+        </div>
+        <div class="window-body">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <h3 style="margin:0; color:var(--text-cyan);">Infected Users</h3>
+                <button onclick="collectAllMalwareRevenue()" style="background:#238636; border-color:#2ea043; font-weight:bold;">Collect All Revenue</button>
+            </div>
+            <div id="botnet-list"></div>
+        </div>
+    </div>
+
+    <!-- Background Music - BlauDisS - eight twenty two [extended version] -->
+    <audio id="bg-audio" loop>
+        <source src="https://www.youtube.com/watch?v=_YyCACBvX7Y" type="audio/mp4">
+        Your browser does not support the audio element.
+    </audio>
+
+    <script>
+        // --- ANIMATED CYBER MATRIX BACKGROUND ENGINE ---
+        const canvas = document.getElementById('matrix-bg');
+        const ctx = canvas.getContext('2d');
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        const katakana = 'アカサタナハマヤラワイキシチニヒミリウクスツヌフムユルエケセテネヘメレオコソトノホモヨロワン0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        const alphabet = katakana.split('');
+        const fontSize = 14;
+        let columns = canvas.width / fontSize;
+        let rainDrops = [];
+
+        for (let x = 0; x < columns; x++) {
+            rainDrops[x] = 1;
+        }
+
+        function drawMatrix() {
+            ctx.fillStyle = 'rgba(1, 4, 9, 0.08)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = '#00ff66';
+            ctx.font = fontSize + 'px monospace';
+
+            for (let i = 0; i < rainDrops.length; i++) {
+                const text = alphabet[Math.floor(Math.random() * alphabet.length)];
+                ctx.fillText(text, i * fontSize, rainDrops[i] * fontSize);
+
+                if (rainDrops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+                    rainDrops[i] = 0;
+                }
+                rainDrops[i]++;
+            }
+        }
+        setInterval(drawMatrix, 30);
+
+        // Audio System Controls
+        const bgAudio = document.getElementById('bg-audio');
+        let musicPlaying = false;
+
+        function playBeep(freq = 600, duration = 0.05) {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.02, audioCtx.currentTime);
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.start(); osc.stop(audioCtx.currentTime + duration);
+            } catch(e) {}
+        }
+
+        function playAlarmSound() {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.3);
+                gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.3);
+            } catch(e) {}
+        }
+
+        function toggleMusic() {
+            musicPlaying = !musicPlaying;
+            const btn = document.getElementById('music-btn');
+            if (musicPlaying) {
+                bgAudio.play().then(() => {
+                    btn.innerText = "🎵 BGM: ON";
+                }).catch(e => {
+                    musicPlaying = false;
+                    console.log("Audio play blocked by browser:", e);
+                });
+            } else {
+                bgAudio.pause();
+                btn.innerText = "🎵 BGM: OFF";
+            }
+        }
+
+        setInterval(() => { document.getElementById('clock-display').innerText = new Date().toLocaleTimeString(); }, 1000);
+
+        // Window Dragging Engine
+        let highestZ = 100;
+        function makeDraggable(winEl) {
+            const header = winEl.querySelector('.window-header');
+            let isDragging = false, offsetWX = 0, offsetWY = 0;
+            winEl.addEventListener('mousedown', () => { highestZ++; winEl.style.zIndex = highestZ; });
+            header.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                offsetWX = e.clientX - winEl.offsetLeft;
+                offsetWY = e.clientY - winEl.offsetTop;
+            });
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                winEl.style.left = (e.clientX - offsetWX) + 'px';
+                winEl.style.top = (e.clientY - offsetWY) + 'px';
+            });
+            document.addEventListener('mouseup', () => { isDragging = false; });
+        }
+        document.querySelectorAll('.window').forEach(makeDraggable);
+
+        function openWindow(id) {
+            const win = document.getElementById(id);
+            win.classList.remove('hidden');
+            highestZ++; win.style.zIndex = highestZ;
+            if(id === 'terminal-win') document.getElementById('cmd-input').focus();
+        }
+        function closeWindow(id) { document.getElementById(id).classList.add('hidden'); }
+        function toggleMin(id) { closeWindow(id); }
+        function toggleMax(id) {
+            const win = document.getElementById(id);
+            if (win.style.width === '100vw') {
+                win.style.width = '760px'; win.style.height = '500px';
+            } else {
+                win.style.width = '100vw'; win.style.height = 'calc(100vh - 38px)';
+                win.style.top = '38px'; win.style.left = '0px';
+            }
+        }
+
+        // State Engine
+        let currentUser = null;
+        let player = { balance: 1000.00 }; 
+        let onlinePlayersMap = {};
+        let activeIntruder = null;
+        let blockedIPsMap = {}; 
+        let systemLogs = []; 
+        let activeTraces = {}; 
+
+        const skillTree = [
+            { id: "ssh_brute", name: "SSH Brute-Force", level: 1, maxLvl: 5, costBase: 100, desc: "Brute-force crack credentials." },
+            { id: "ftp_crack", name: "FTP Bypass", level: 1, maxLvl: 5, costBase: 100, desc: "Expose FTP ports." },
+            { id: "slowloris", name: "Slowloris DDoS", level: 0, maxLvl: 5, costBase: 200, desc: "Overwhelm HTTP traffic." },
+            { id: "sqli", name: "SQL Injector", level: 0, maxLvl: 5, costBase: 500, desc: "Extract database schema." },
+            { id: "zeroday", name: "Zero-Day Suite", level: 0, maxLvl: 5, costBase: 1500, desc: "Stealth exploits." }
+        ];
+
+        const defenseMatrix = [
+            { id: "firewall_ssh", name: "Port 22 SSH Firewall", level: 0, maxLvl: 5, costBase: 120, desc: "Blocks incoming SSH exploits." },
+            { id: "firewall_ftp", name: "Port 21 FTP Sentinel", level: 0, maxLvl: 5, costBase: 120, desc: "Defends FTP port." },
+            { id: "firewall_web", name: "Port 80 Web Shield", level: 0, maxLvl: 5, costBase: 250, desc: "Mitigates web traffic." },
+            { id: "ids_auto", name: "IDS Auto-Countermeasure", level: 0, maxLvl: 5, costBase: 600, desc: "Intrusion Detection System." }
+        ];
+
+        const npcTargets = [
+            { ip: "192.168.1.10", name: "Greggs Bakery Vault", difficulty: "Easy", reqSkill: "ssh_brute", pass: "sausage_roll1", cracked: false },
+            { ip: "192.168.1.45", name: "McDonald's UK Till Server", difficulty: "Easy", reqSkill: "ftp_crack", pass: "big_mac_2026", cracked: false },
+            { ip: "10.0.4.88", name: "Starbucks UK Point-of-Sale", difficulty: "Medium", reqSkill: "ftp_crack", pass: "pumpkin_spice", cracked: false },
+            { ip: "10.0.9.14", name: "Nando's Peri-Peri Hub", difficulty: "Medium", reqSkill: "slowloris", pass: "extra_hot_123", cracked: false },
+            { ip: "172.16.0.4", name: "Primark Flagship Store", difficulty: "Hard", reqSkill: "sqli", pass: "bargain_fashion", cracked: false },
+            { ip: "172.16.8.99", name: "Tesco Express Vault", difficulty: "Hard", reqSkill: "sqli", pass: "clubcard_points", cracked: false },
+            { ip: "54.210.9.11", name: "JD Sports Corporate Host", difficulty: "Expert", reqSkill: "zeroday", pass: "king_of_trainers", cracked: false }
+        ];
+
+        let botnet = [];
+
+        function recordSystemLog(visitorIP, actionStatus) {
+            const timestamp = new Date().toLocaleTimeString();
+            systemLogs.push(`[${timestamp}] Connection from ${visitorIP} - Status: ${actionStatus}`);
+        }
+
+        function getSkill(id) { return skillTree.find(s => s.id === id); }
+        function getDefense(id) { return defenseMatrix.find(d => d.id === id); }
+
+        function saveUserData() {
+            if (!currentUser) return;
+            const userData = {
+                username: currentUser.username,
+                password: currentUser.password,
+                balance: player.balance,
+                skills: skillTree.map(s => ({ id: s.id, level: s.level })),
+                defenses: defenseMatrix.map(d => ({ id: d.id, level: d.level })),
+                botnet: botnet,
+                logs: systemLogs
+            };
+            localStorage.setItem('grey_os_user_' + currentUser.username, JSON.stringify(userData));
+            localStorage.setItem('grey_os_active_session', currentUser.username);
+        }
+
+        function loadUserSession(username) {
+            const saved = localStorage.getItem('grey_os_user_' + username);
+            let isNewUser = false;
+
+            if (!saved) {
+                isNewUser = true;
+            } else {
+                const parsed = JSON.parse(saved);
+                currentUser = { username: parsed.username, password: parsed.password };
+                player.balance = parsed.balance !== undefined ? parsed.balance : 1000.00;
+
+                if (parsed.skills) parsed.skills.forEach(s => { const item = getSkill(s.id); if(item) item.level = s.level; });
+                if (parsed.defenses) parsed.defenses.forEach(d => { const item = getDefense(d.id); if(item) item.level = d.level; });
+                if (parsed.botnet) botnet = parsed.botnet;
+                if (parsed.logs) systemLogs = parsed.logs;
+            }
+
+            document.getElementById('my-username-display').innerText = currentUser.username;
+            document.getElementById('auth-modal').classList.add('hidden');
+            
+            updateDisplays();
+            renderSkillTree();
+            renderDefenses();
+            renderBotnet();
+            renderNPCTargets();
+            initP2P(currentUser.username);
+            initDiscoveryNetwork(currentUser.username);
+
+            if (isNewUser) {
+                startTutorialSequence();
+            }
+            return true;
+        }
+
+        function handleLogin() {
+            const userIn = document.getElementById('auth-username').value.trim().toLowerCase();
+            const passIn = document.getElementById('auth-password').value.trim();
+            const errDiv = document.getElementById('auth-error');
+
+            if (!userIn || !passIn) {
+                errDiv.innerText = "Please enter both username and password.";
+                errDiv.style.display = "block";
+                return;
+            }
+
+            const saved = localStorage.getItem('grey_os_user_' + userIn);
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (parsed.password !== passIn) {
+                    errDiv.innerText = "Incorrect password for existing user.";
+                    errDiv.style.display = "block";
+                    return;
+                }
+                loadUserSession(userIn);
+            } else {
+                currentUser = { username: userIn, password: passIn };
+                saveUserData();
+                loadUserSession(userIn);
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('grey_os_active_session');
+            location.reload();
+        }
+
+        // TUTORIAL ACADEMY ENGINE
+        let currentTutStep = 0;
+        const tutorialSteps = [
+            {
+                title: "📖 ACADEMY TUTORIAL (1/6): Welcome & NPC IP Target List",
+                body: "Welcome operator! You start with <strong>£1,000.00</strong> in your vault. First, click the <strong>🏬 UK NPC Brands</strong> desktop icon to find offline company targets and their IP addresses (e.g. Greggs on <code>192.168.1.10</code>).",
+                action: () => { openWindow('npc-win'); }
+            },
+            {
+                title: "📖 ACADEMY TUTORIAL (2/6): Buying Hacks & Upgrades",
+                body: "Click the <strong>🌳 Skill Tree</strong> desktop icon. This is where you purchase new hacking tools like <em>Slowloris DDoS</em>, <em>SQL Injector</em>, and <em>Zero-Day Suite</em> using your vault money.",
+                action: () => { openWindow('skill-win'); }
+            },
+            {
+                title: "📖 ACADEMY TUTORIAL (3/6): Command Shell Overview",
+                body: "Open the <strong>📟 Terminal</strong>. Key commands include:<br>• <code>nmap [IP]</code> - Scan open ports<br>• <code>ssh_brute [IP]</code> - Run exploit tool<br>• <code>connect [IP] [pass]</code> - Gain root shell<br>• <code>ls</code> - Find files like bank.txt<br>• <code>upload bank.txt</code> - Transfer file<br>• <code>clearlogs</code> - Wipe access tracks.",
+                action: () => { openWindow('terminal-win'); }
+            },
+            {
+                title: "📖 ACADEMY TUTORIAL (4/6): First Mission Guidance",
+                body: "Let's breach <strong>Greggs Bakery Vault</strong> at <code>192.168.1.10</code>!<br><br>1. Type: <code>nmap 192.168.1.10</code><br>2. Execute: <code>ssh_brute 192.168.1.10</code><br>3. Wait for the exploit to finish to receive the password.",
+                action: () => { openWindow('terminal-win'); }
+            },
+            {
+                title: "📖 ACADEMY TUTORIAL (5/6): Uploading bank.txt & Payouts",
+                body: "Log in with:<br><code>connect 192.168.1.10 sausage_roll1</code><br>Then type <code>ls</code> to locate <code>bank.txt</code>, and type <code>upload bank.txt</code> (NPCs upload instantly!). Cracking it yields between £50 and £250.",
+                action: () => { openWindow('terminal-win'); }
+            },
+            {
+                title: "📖 ACADEMY TUTORIAL (6/6): System Logs & clearlogs",
+                body: "Type <code>cat /var/system.log</code> to inspect who has visited your PC. Always run <code>clearlogs</code> on target machines after hacking to avoid counter-traces! Good luck!",
+                action: () => { openWindow('terminal-win'); }
+            }
+        ];
+
+        function startTutorialSequence() {
+            currentTutStep = 0;
+            renderTutorialStep();
+            document.getElementById('tutorial-card').classList.remove('hidden');
+        }
+
+        function startTutorialManual() { startTutorialSequence(); }
+
+        function renderTutorialStep() {
+            const step = tutorialSteps[currentTutStep];
+            document.getElementById('tut-title').innerText = step.title;
+            document.getElementById('tut-body').innerHTML = step.body;
+            document.getElementById('tut-prev-btn').disabled = (currentTutStep === 0);
+            
+            if (currentTutStep === tutorialSteps.length - 1) {
+                document.getElementById('tut-next-btn').innerText = "Finish Academy ✓";
+            } else {
+                document.getElementById('tut-next-btn').innerText = "Next Step →";
+            }
+
+            if (step.action) step.action();
+        }
+
+        function nextTutorialStep() {
+            if (currentTutStep < tutorialSteps.length - 1) {
+                currentTutStep++;
+                renderTutorialStep();
+            } else {
+                skipTutorial();
+            }
+        }
+
+        function prevTutorialStep() {
+            if (currentTutStep > 0) {
+                currentTutStep--;
+                renderTutorialStep();
+            }
+        }
+
+        function skipTutorial() {
+            document.getElementById('tutorial-card').classList.add('hidden');
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const activeUser = localStorage.getItem('grey_os_active_session');
+            if (activeUser) {
+                loadUserSession(activeUser);
+            }
+        });
+
+        // Global Discovery (MQTT WebSockets)
+        let mqttClient = null;
+
+        function initDiscoveryNetwork(username) {
+            mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+
+            mqttClient.on('connect', () => {
+                mqttClient.subscribe('greyos/presence/#');
+                broadcastPresence();
+                setInterval(broadcastPresence, 4000);
+            });
+
+            mqttClient.on('message', (topic, payload) => {
+                try {
+                    const data = JSON.parse(payload.toString());
+                    if (data.username && data.username !== username) {
+                        onlinePlayersMap[data.username] = Date.now();
+                        renderOnlineUsers();
+                    }
+                } catch(e) {}
+            });
+        }
+
+        function broadcastPresence() {
+            if (mqttClient && currentUser) {
+                mqttClient.publish(`greyos/presence/${currentUser.username}`, JSON.stringify({
+                    username: currentUser.username,
+                    ts: Date.now()
+                }));
+            }
+        }
+
+        setInterval(() => {
+            const now = Date.now();
+            let changed = false;
+            Object.keys(onlinePlayersMap).forEach(usr => {
+                if (now - onlinePlayersMap[usr] > 10000) {
+                    delete onlinePlayersMap[usr];
+                    changed = true;
+                }
+            });
+            if (changed) renderOnlineUsers();
+        }, 3000);
+
+        function renderOnlineUsers() {
+            const container = document.getElementById('online-users-list');
+            const countEl = document.getElementById('online-count');
+            const users = Object.keys(onlinePlayersMap);
+
+            countEl.innerText = users.length + 1;
+            container.innerHTML = '';
+
+            const selfBox = document.createElement('div');
+            selfBox.className = 'peer-box';
+            selfBox.style.borderColor = 'var(--text-cyan)';
+            selfBox.innerHTML = `
+                <div>
+                    <span class="status-dot"></span>
+                    <strong style="color:var(--text-cyan)">${currentUser.username} (You)</strong><br>
+                    <small style="color:#8b949e">Local Host IP: ${currentUser.username}</small>
+                </div>
+                <button disabled>Current System</button>
+            `;
+            container.appendChild(selfBox);
+
+            if (users.length === 0) return;
+
+            users.forEach(usr => {
+                const isConnected = !!peerConns[usr];
+                const box = document.createElement('div');
+                box.className = 'peer-box';
+                box.innerHTML = `
+                    <div>
+                        <span class="status-dot"></span>
+                        <strong style="color:var(--text-green)">${usr}</strong><br>
+                        <small style="color:#8b949e">${isConnected ? 'Network Linked' : 'Online & Available'}</small>
+                    </div>
+                    <div>
+                        ${isConnected ? 
+                            `<button onclick="targetToTerminal('${usr}')" style="background:#238636; border-color:#2ea043;">Target User</button>` : 
+                            `<button onclick="connectToTargetUser('${usr}')">Connect Peer</button>`
+                        }
+                    </div>
+                `;
+                container.appendChild(box);
+            });
+        }
+
+        function renderNPCTargets() {
+            const container = document.getElementById('npc-list');
+            container.innerHTML = '';
+            npcTargets.forEach(npc => {
+                const card = document.createElement('div');
+                card.className = 'peer-box';
+                card.innerHTML = `
+                    <div>
+                        <strong style="color:var(--text-cyan)">${npc.name} (${npc.ip})</strong><br>
+                        <small style="color:#8b949e">Difficulty: ${npc.difficulty}</small>
+                    </div>
+                    <div>
+                        <button onclick="targetNPCToTerminal('${npc.ip}')" style="background:#238636; border-color:#2ea043;">Target Outlet</button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function renderSkillTree() {
+            const container = document.getElementById('skill-tree-container');
+            container.innerHTML = '';
+            skillTree.forEach(node => {
+                const cost = node.costBase * (node.level + 1);
+                const canUpgrade = node.level < node.maxLvl && player.balance >= cost;
+                const card = document.createElement('div');
+                card.className = `card-node ${node.level > 0 ? 'unlocked' : ''}`;
+                card.innerHTML = `
+                    <div>
+                        <h4>${node.name}</h4>
+                        <div class="stat">Level: ${node.level} / ${node.maxLvl}</div>
+                        <p>${node.desc}</p>
+                    </div>
+                    <div>
+                        <div style="font-size:10px; color:var(--text-yellow); margin-bottom:5px;">
+                            ${node.level >= node.maxLvl ? 'MAXED OUT' : `Upgrade: £${cost}`}
+                        </div>
+                        <button ${canUpgrade ? '' : 'disabled'} onclick="upgradeSkill('${node.id}')" style="width:100%;">
+                            ${node.level === 0 ? 'UNLOCK TOOL' : node.level >= node.maxLvl ? 'MAX LEVEL' : 'UPGRADE'}
+                        </button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function upgradeSkill(id) {
+            const node = getSkill(id);
+            if (!node) return;
+            const cost = node.costBase * (node.level + 1);
+            if (node.level < node.maxLvl && player.balance >= cost) {
+                player.balance -= cost;
+                node.level++;
+                saveUserData(); updateDisplays(); renderSkillTree();
+                printTerm(`[UPGRADE] '${node.name}' upgraded to Level ${node.level}!`, "var(--text-green)");
+            }
+        }
+
+        function renderDefenses() {
+            const container = document.getElementById('defense-container');
+            container.innerHTML = '';
+            defenseMatrix.forEach(def => {
+                const cost = def.costBase * (def.level + 1);
+                const canUpgrade = def.level < def.maxLvl && player.balance >= cost;
+                const card = document.createElement('div');
+                card.className = `card-node ${def.level > 0 ? 'unlocked' : ''}`;
+                card.innerHTML = `
+                    <div>
+                        <h4>${def.name}</h4>
+                        <div class="stat">Defense Rating: Level ${def.level} / ${def.maxLvl}</div>
+                        <p>${def.desc}</p>
+                    </div>
+                    <div>
+                        <div style="font-size:10px; color:var(--text-yellow); margin-bottom:5px;">
+                            ${def.level >= def.maxLvl ? 'MAXED OUT' : `Upgrade: £${cost}`}
+                        </div>
+                        <button ${canUpgrade ? '' : 'disabled'} onclick="upgradeDefense('${def.id}')" style="width:100%;">
+                            ${def.level === 0 ? 'INSTALL FIREWALL' : def.level >= def.maxLvl ? 'MAX DEFENSE' : 'UPGRADE DEFENSE'}
+                        </button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function upgradeDefense(id) {
+            const def = getDefense(id);
+            if (!def) return;
+            const cost = def.costBase * (def.level + 1);
+            if (def.level < def.maxLvl && player.balance >= cost) {
+                player.balance -= cost;
+                def.level++;
+                saveUserData(); updateDisplays(); renderDefenses();
+                printTerm(`[DEFENSE MATRIX] '${def.name}' upgraded to Level ${def.level}!`, "var(--text-cyan)");
+            }
+        }
+
+        // PeerJS Engine
+        let peer = null;
+        let peerConns = {};
+        let remoteHosts = {};
+
+        function initP2P(username) {
+            if (peer) peer.destroy();
+            peer = new Peer(username);
+
+            peer.on('open', (id) => {
+                printTerm(`[P2P NETWORK] Node online on IP network: '${id}'`, "var(--text-cyan)");
+            });
+
+            peer.on('connection', (conn) => {
+                setupConnection(conn);
+                recordSystemLog(conn.peer, "Connected");
+                saveUserData();
+                printTerm(`[INCOMING CONNECTION] Remote player user connected: '${conn.peer}'`, "var(--text-yellow)");
+            });
+
+            peer.on('error', (err) => {
+                if(err.type === 'unavailable-id') {
+                    printTerm(`[P2P ERROR] User '${username}' active elsewhere.`, "var(--text-red)");
+                }
+            });
+        }
+
+        function connectToTargetUser(targetUser) {
+            if (!targetUser) return;
+            if (targetUser === currentUser.username) { printTerm("Error: Cannot connect to yourself.", "var(--text-red)"); return; }
+            if (peerConns[targetUser]) { printTerm("Error: Already connected.", "var(--text-yellow)"); return; }
+
+            printTerm(`Connecting to online user '${targetUser}'...`, "var(--text-cyan)");
+            const conn = peer.connect(targetUser);
+            setupConnection(conn);
+        }
+
+        function connectToPeerInput() {
+            const targetUser = document.getElementById('target-username-input').value.trim().toLowerCase();
+            connectToTargetUser(targetUser);
+        }
+
+        function setupConnection(conn) {
+            conn.on('open', () => {
+                peerConns[conn.peer] = conn;
+                remoteHosts[conn.peer] = { username: conn.peer, crackedPass: null };
+                renderOnlineUsers();
+                printTerm(`[CONNECTED] Network link established with user '${conn.peer}'. Execute 'nmap ${conn.peer}'`, "var(--text-green)");
+                
+                sendP2PMessage(conn.peer, { type: 'SYNC_STATS', defenses: defenseMatrix, password: currentUser.password });
+                startCounterTrace(conn.peer);
+            });
+
+            conn.on('data', (data) => {
+                handleP2PData(conn.peer, data);
+            });
+
+            conn.on('close', () => {
+                delete peerConns[conn.peer];
+                delete remoteHosts[conn.peer];
+                cancelCounterTrace(conn.peer);
+                renderOnlineUsers();
+                printTerm(`[DISCONNECT] Online user '${conn.peer}' disconnected.`, "var(--text-red)");
+            });
+        }
+
+        function sendP2PMessage(targetUsername, messageObj) {
+            if (peerConns[targetUsername]) {
+                peerConns[targetUsername].send(messageObj);
+            }
+        }
+
+        function startCounterTrace(attackerUser) {
+            activeTraces[attackerUser] = setTimeout(() => {
+                printTerm(`[COUNTER-TRACE SUCCESS] Attacker '${attackerUser}' exposed! Connection severed & IP blocked.`, "var(--text-red)");
+                sendP2PMessage(attackerUser, { type: 'COUNTER_TRACED', reason: "You took too long without clearing logs! Counter-trace exposed your IP." });
+                blockedIPsMap[attackerUser] = Date.now() + 3600000;
+                delete activeTraces[attackerUser];
+            }, 30000);
+        }
+
+        function cancelCounterTrace(attackerUser) {
+            if (activeTraces[attackerUser]) {
+                clearTimeout(activeTraces[attackerUser]);
+                delete activeTraces[attackerUser];
+                printTerm(`[SECURITY] Attacker '${attackerUser}' wiped logs. Counter-trace aborted.`, "var(--text-cyan)");
+            }
+        }
+
+        function triggerDefenderWarning(attackerUser, toolUsed) {
+            if (blockedIPsMap[attackerUser] && Date.now() < blockedIPsMap[attackerUser]) {
+                sendP2PMessage(attackerUser, { type: 'ATTACK_CANCELLED', reason: "Your IP is currently blocked by target's 1-hour firewall ban!" });
+                return;
+            }
+
+            activeIntruder = attackerUser;
+            document.getElementById('intruder-id-display').innerText = attackerUser;
+            document.getElementById('intruder-tool-display').innerText = toolUsed.toUpperCase();
+            openWindow('intrusion-alert-win');
+            playAlarmSound();
+        }
+
+        function purgeActiveIntruder() {
+            if (!activeIntruder) return;
+            const targetUser = activeIntruder;
+            
+            blockedIPsMap[targetUser] = Date.now() + 3600000;
+            sendP2PMessage(targetUser, { type: 'ATTACK_CANCELLED', reason: "Target actively purged your session and placed a 1-hour block on your IP!" });
+
+            printTerm(`[DEFENSE ACTION] PURGED intrusion session from '${targetUser}'! IP blocked for 1 hour.`, "var(--text-green)");
+            closeWindow('intrusion-alert-win');
+            activeIntruder = null;
+        }
+
+        function handleP2PData(senderUser, data) {
+            switch(data.type) {
+                case 'SYNC_STATS':
+                    if (remoteHosts[senderUser]) {
+                        remoteHosts[senderUser].defenses = data.defenses;
+                        remoteHosts[senderUser].realPass = data.password;
+                    }
+                    break;
+
+                case 'ATTACK_INITIATED':
+                    triggerDefenderWarning(senderUser, data.tool);
+                    printTerm(`[WARNING] System defenses detected incoming exploit from '${senderUser}' (${data.tool.toUpperCase()})!`, "var(--text-red)");
+                    break;
+
+                case 'ATTACK_COMPLETE':
+                    closeWindow('intrusion-alert-win');
+                    sendP2PMessage(senderUser, { type: 'ATTACK_RESULT', success: true, discoveredPassword: remoteHosts[senderUser] ? remoteHosts[senderUser].realPass : 'secret' });
+                    break;
+
+                case 'ATTACK_RESULT':
+                    printTerm(`[+] EXPLOIT SUCCESSFUL! Target password recovered: ${data.discoveredPassword}`, "var(--text-green)");
+                    printTerm(`    Login Command: connect ${senderUser} ${data.discoveredPassword}`, "var(--text-cyan)");
+                    break;
+
+                case 'ATTACK_CANCELLED':
+                    cancelActiveProgress();
+                    printTerm(`[-] EXPLOIT ABORTED: ${data.reason}`, "var(--text-red)");
+                    break;
+
+                case 'WIPE_LOGS':
+                    systemLogs = [];
+                    saveUserData();
+                    cancelCounterTrace(senderUser);
+                    printTerm(`[ALERT] Target machine executed clearlogs. Your access tracks were erased.`, "var(--text-yellow)");
+                    break;
+
+                case 'COUNTER_TRACED':
+                    activeRemoteSession = null;
+                    promptLabel.innerText = `operator@grey-os:~$`;
+                    printTerm(`[SECURITY ALERT] ${data.reason}`, "var(--text-red)");
+                    break;
+            }
+        }
+
+        // Botnet Engine
+        function renderBotnet() {
+            const container = document.getElementById('botnet-list');
+            container.innerHTML = '';
+            if (botnet.length === 0) {
+                container.innerHTML = '<p style="color:#8b949e; font-size:12px;">No infected users in Botnet Box.</p>';
+                return;
+            }
+
+            botnet.forEach(node => {
+                const card = document.createElement('div');
+                card.className = 'peer-box';
+                card.innerHTML = `
+                    <div>
+                        <strong style="color:var(--text-cyan)">${node.username}</strong><br>
+                        <small style="color:var(--text-green)">Pending: £${node.uncollected}</small>
+                    </div>
+                    <button onclick="collectSingleMalware('${node.username}')">Collect £${node.uncollected}</button>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function collectAllMalwareRevenue() {
+            let total = 0;
+            botnet.forEach(node => { total += node.uncollected; node.uncollected = 0; });
+            if (total > 0) {
+                player.balance += total;
+                saveUserData(); updateDisplays(); renderBotnet();
+                printTerm(`[BOTNET] Collected £${total} total!`, "var(--text-green)");
+            }
+        }
+
+        // Terminal & Timed Progress Engine
+        const cmdInput = document.getElementById('cmd-input');
+        const termOut = document.getElementById('term-out');
+        const promptLabel = document.getElementById('prompt-label');
+
+        let cmdHistory = [];
+        let historyIndex = -1;
+        let activeRemoteSession = null;
+        let currentProgressInterval = null;
+
+        function startTimedProgress(actionText, durationSec, onComplete) {
+            const container = document.getElementById('attack-progress-container');
+            const fill = document.getElementById('terminal-progress-fill');
+            const actionLabel = document.getElementById('progress-action-label');
+            const pctLabel = document.getElementById('progress-percent-label');
+
+            container.classList.remove('hidden');
+            actionLabel.innerText = `${actionText}`;
+            fill.style.width = '0%';
+            pctLabel.innerText = '0%';
+
+            let elapsed = 0;
+            const step = 100;
+            if (currentProgressInterval) clearInterval(currentProgressInterval);
+
+            currentProgressInterval = setInterval(() => {
+                elapsed += step;
+                const pct = Math.min(100, Math.floor((elapsed / (durationSec * 1000)) * 100));
+                fill.style.width = pct + '%';
+                pctLabel.innerText = pct + '%';
+
+                if (elapsed >= durationSec * 1000) {
+                    clearInterval(currentProgressInterval);
+                    container.classList.add('hidden');
+                    onComplete();
+                }
+            }, step);
+        }
+
+        function cancelActiveProgress() {
+            if (currentProgressInterval) {
+                clearInterval(currentProgressInterval);
+                document.getElementById('attack-progress-container').classList.add('hidden');
+            }
+        }
+
+        cmdInput.addEventListener('keydown', function(e) {
+            playBeep(800, 0.01);
+
+            if (e.key === 'Enter') {
+                const rawCmd = cmdInput.value.trim();
+                cmdInput.value = '';
+                if (!rawCmd) return;
+
+                cmdHistory.push(rawCmd); 
+                historyIndex = cmdHistory.length; 
+                printTerm(`${promptLabel.innerText} ${rawCmd}`);
+                processCommand(rawCmd);
+                termOut.scrollTop = termOut.scrollHeight;
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (cmdHistory.length > 0 && historyIndex > 0) {
+                    historyIndex--;
+                    cmdInput.value = cmdHistory[historyIndex];
+                }
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (historyIndex < cmdHistory.length - 1) {
+                    historyIndex++;
+                    cmdInput.value = cmdHistory[historyIndex];
+                } else {
+                    historyIndex = cmdHistory.length;
+                    cmdInput.value = '';
+                }
+            }
+        });
+
+        function printTerm(text, color = "var(--text-main)") {
+            const line = document.createElement('div');
+            line.style.color = color;
+            line.innerHTML = text;
+            termOut.appendChild(line);
+        }
+
+        function targetToTerminal(username) {
+            openWindow('terminal-win');
+            printTerm(`[TARGETING USER] System node '${username}' selected. Run 'nmap ${username}'.`, "var(--text-yellow)");
+        }
+
+        function targetNPCToTerminal(ip) {
+            openWindow('terminal-win');
+            printTerm(`[TARGETING NPC] System IP '${ip}' selected. Run 'nmap ${ip}'.`, "var(--text-yellow)");
+        }
+
+        function processCommand(raw) {
+            const parts = raw.split(' ');
+            const cmd = parts[0].toLowerCase();
+            const args = parts.slice(1);
+
+            switch(cmd) {
+                case 'help':
+                    printTerm("Grey-OS Cyber Commands Matrix:", "var(--text-cyan)");
+                    printTerm("  nmap [username/IP]                     - Scan target ports");
+                    printTerm("  ssh_brute / ftp_crack [username/IP]    - Execute exploit tool (NPCs complete instantly)");
+                    printTerm("  connect [username/IP] [password]       - Access root shell");
+                    printTerm("  ls                                     - List remote files (find bank.txt)");
+                    printTerm("  upload bank.txt                        - Upload bank file (10s delay, instant for NPCs)");
+                    printTerm("  clearlogs                              - Erase system logs from connected machine");
+                    printTerm("  cat /var/system.log                    - View system visitor access logs");
+                    printTerm("  disconnect                             - Terminate session");
+                    printTerm("  clear                                  - Clear terminal");
+                    break;
+
+                case 'nmap':
+                    if (!args[0]) { printTerm("Usage: nmap [username/IP]", "var(--text-red)"); break; }
+                    startTimedProgress(`Scanning Port Matrix...`, 2, () => {
+                        printTerm(`Nmap scan report:`, "var(--text-cyan)");
+                        printTerm(`PORT 21/tcp OPEN  ftp`);
+                        printTerm(`PORT 22/tcp OPEN  ssh`);
+                        printTerm(`PORT 80/tcp OPEN  http`);
+                    });
+                    break;
+
+                case 'ssh_brute':
+                case 'ftp_crack':
+                case 'slowloris':
+                case 'sqli':
+                case 'zeroday':
+                    if (!args[0]) { printTerm(`Usage: ${cmd} [username/IP]`, "var(--text-red)"); break; }
+                    const targetUsr = args[0].toLowerCase();
+                    const targetNPC = npcTargets.find(n => n.ip === targetUsr);
+
+                    const attackDuration = targetNPC ? 0 : 5;
+
+                    if (targetNPC) {
+                        targetNPC.cracked = true;
+                        printTerm(`[+] NPC EXPLOIT SUCCESSFUL! Credentials extracted:`, "var(--text-green)");
+                        printTerm(`    Outlet: ${targetNPC.name} | Password: ${targetNPC.pass}`, "var(--text-yellow)");
+                        printTerm(`    Login Command: connect ${targetNPC.ip} ${targetNPC.pass}`, "var(--text-cyan)");
+                        break;
+                    }
+
+                    sendP2PMessage(targetUsr, { type: 'ATTACK_INITIATED', tool: cmd });
+                    startTimedProgress(`Breaching ${targetUsr}...`, attackDuration, () => {
+                        sendP2PMessage(targetUsr, { type: 'ATTACK_COMPLETE', tool: cmd });
+                    });
+                    break;
+
+                case 'connect':
+                    if (args.length < 2) { printTerm("Usage: connect [IP/User] [password]", "var(--text-red)"); break; }
+                    const connHost = args[0].toLowerCase();
+                    const connPass = args[1];
+
+                    const npcMatch = npcTargets.find(n => n.ip === connHost);
+                    if (npcMatch && npcMatch.pass === connPass) {
+                        activeRemoteSession = npcMatch;
+                        promptLabel.innerText = `root@uk-${npcMatch.ip}:/#`;
+                        printTerm(`[SUCCESS] Root shell attached to ${npcMatch.name}. Run 'ls'.`, "var(--text-green)");
+                        break;
+                    }
+
+                    if (remoteHosts[connHost] && remoteHosts[connHost].realPass === connPass) {
+                        activeRemoteSession = connHost;
+                        promptLabel.innerText = `root@${connHost}:/#`;
+                        printTerm(`[SUCCESS] Root shell attached to remote player '${connHost}'. Run 'ls'.`, "var(--text-green)");
+                        break;
+                    }
+
+                    printTerm(`[ACCESS DENIED] Invalid credentials.`, "var(--text-red)");
+                    break;
+
+                case 'ls':
+                    if (!activeRemoteSession) {
+                        printTerm("bin/   home/   var/   usr/", "var(--text-main)");
+                    } else {
+                        printTerm("bank.txt   system.log   passwd.bak", "var(--text-cyan)");
+                    }
+                    break;
+
+                case 'upload':
+                    if (!args[0] || args[0] !== 'bank.txt') {
+                        printTerm("Usage: upload bank.txt", "var(--text-red)");
+                        break;
+                    }
+                    if (!activeRemoteSession) {
+                        printTerm("Error: Not connected to a remote session.", "var(--text-red)");
+                        break;
+                    }
+
+                    const isNPC = typeof activeRemoteSession === 'object';
+                    const uploadTime = isNPC ? 0 : 10;
+
+                    startTimedProgress("Uploading bank.txt...", uploadTime, () => {
+                        const payout = Math.floor(Math.random() * (250 - 50 + 1)) + 50;
+                        player.balance += payout;
+                        saveUserData(); updateDisplays();
+                        printTerm(`[SUCCESS] bank.txt uploaded & cracked! Stolen Payout: £${payout}`, "var(--text-green)");
+                    });
+                    break;
+
+                case 'clearlogs':
+                    if (!activeRemoteSession) {
+                        systemLogs = [];
+                        saveUserData();
+                        printTerm("Local system logs erased successfully.", "var(--text-green)");
+                    } else {
+                        if (typeof activeRemoteSession === 'object') {
+                            printTerm("Target system logs successfully erased.", "var(--text-green)");
+                        } else {
+                            sendP2PMessage(activeRemoteSession, { type: 'WIPE_LOGS' });
+                            printTerm("Target remote logs erased successfully. Counter-trace avoided!", "var(--text-green)");
+                        }
+                    }
+                    break;
+
+                case 'cat':
+                    if (args[0] === '/var/system.log') {
+                        printTerm("--- System Access Logs ---", "var(--text-cyan)");
+                        if (systemLogs.length === 0) printTerm("No visitor logs recorded.");
+                        else systemLogs.forEach(l => printTerm(l));
+                    } else {
+                        printTerm("File not found.", "var(--text-red)");
+                    }
+                    break;
+
+                case 'disconnect':
+                    activeRemoteSession = null;
+                    promptLabel.innerText = `operator@grey-os:~$`;
+                    printTerm("Disconnected.", "var(--text-yellow)");
+                    break;
+
+                case 'clear':
+                    termOut.innerHTML = '';
+                    break;
+
+                default:
+                    printTerm(`Unknown command: ${cmd}`, "var(--text-red)");
+            }
+        }
+
+        function updateDisplays() {
+            document.getElementById('balance-display').innerText = `£${player.balance.toLocaleString('en-GB', {minimumFractionDigits: 2})}`;
+        }
+    </script>
+</body>
+</html>
